@@ -31,6 +31,7 @@ import org.eclipse.ui.IEditorPart;
 import org.eclipse.uml2.uml.Actor;
 import org.eclipse.uml2.uml.Behavior;
 import org.eclipse.uml2.uml.BehaviorExecutionSpecification;
+import org.eclipse.uml2.uml.BehavioredClassifier;
 import org.eclipse.uml2.uml.Class;
 import org.eclipse.uml2.uml.CombinedFragment;
 import org.eclipse.uml2.uml.Comment;
@@ -60,6 +61,7 @@ import org.eclipse.uml2.uml.Type;
 import org.eclipse.uml2.uml.UMLFactory;
 import org.obeonetwork.dsl.uml2.design.services.internal.NamedElementServices;
 
+import fr.obeo.acceleo.gen.template.eval.ENode;
 import fr.obeo.dsl.common.ui.tools.api.util.EclipseUIUtil;
 import fr.obeo.dsl.viewpoint.DDiagram;
 import fr.obeo.dsl.viewpoint.DDiagramElement;
@@ -70,6 +72,7 @@ import fr.obeo.dsl.viewpoint.diagram.sequence.business.internal.elements.Sequenc
 import fr.obeo.dsl.viewpoint.diagram.sequence.business.internal.operation.RefreshGraphicalOrderingOperation;
 import fr.obeo.dsl.viewpoint.diagram.sequence.business.internal.operation.RefreshSemanticOrderingsOperation;
 import fr.obeo.dsl.viewpoint.diagram.sequence.business.internal.operation.SynchronizeGraphicalOrderingOperation;
+import fr.obeo.dsl.viewpoint.diagram.sequence.ordering.SingleEventEnd;
 import fr.obeo.dsl.viewpoint.diagram.sequence.ui.tool.internal.edit.part.ISequenceEventEditPart;
 import fr.obeo.dsl.viewpoint.diagram.sequence.ui.tool.internal.edit.part.SequenceDiagramEditPart;
 import fr.obeo.dsl.viewpoint.diagram.tools.api.editor.DDiagramEditor;
@@ -107,7 +110,7 @@ public class SequenceServices {
 	 * Operation service.
 	 */
 	private OperationServices operationService = new OperationServices();
-
+	
 	/**
 	 * Retrieves the context element ({@link Lifeline} or {@link ExecutionSpecification}) of the given
 	 * {@link OccurrenceSpecification}.
@@ -485,7 +488,7 @@ public class SequenceServices {
 		lifeline.getNearestPackage().getPackagedElements().add(dependency);
 		lifeline.getClientDependencies().add(dependency);
 	}
-
+	
 	/**
 	 * Create a typed execution. Execution could be created on lifeline or other parent execution.
 	 * 
@@ -500,7 +503,7 @@ public class SequenceServices {
 	 */
 	public void createExecution(Interaction interaction, NamedElement fragment, Operation operation,
 			NamedElement startingEndPredecessor) {
-		final Lifeline lifeline = getLifeline(fragment);
+		final Lifeline lifeline = getLifeline(fragment);		
 
 		final UMLFactory factory = UMLFactory.eINSTANCE;
 		StringBuffer executionName;
@@ -579,7 +582,7 @@ public class SequenceServices {
 			NamedElement startingEndPredecessor) {
 		createExecution(interaction, fragment, null, startingEndPredecessor);
 	}
-
+	
 	/**
 	 * Create synchronous typed message.
 	 * 
@@ -700,7 +703,7 @@ public class SequenceServices {
 
 		return result;
 	}
-
+	
 	/**
 	 * Get all actors and their containers
 	 * 
@@ -1695,6 +1698,38 @@ public class SequenceServices {
 			fragments.move(fragments.indexOf(execution) + 1, endExec);
 		}
 	}
+	
+	public void createCreationMessage(Interaction interaction, NamedElement sourceFragment,
+			NamedElement targetFragment, NamedElement startingEndPredecessor) {
+
+		final BehaviorExecutionSpecification predecessorExecution = getExecution((InteractionFragment)startingEndPredecessor);
+		final EList<InteractionFragment> fragments = interaction.getFragments();
+
+		// Create message
+		final Message message = createCreationsMessage(interaction, sourceFragment,
+				targetFragment);
+
+		interaction.getMessages().add(message);
+
+		MessageOccurrenceSpecification senderEventMessage = (MessageOccurrenceSpecification)message
+				.getSendEvent();
+		MessageOccurrenceSpecification receiverEventMessage = (MessageOccurrenceSpecification)message
+				.getReceiveEvent();
+
+		// If predecessor is the beginning of an execution add message after the execution
+		if (startingEndPredecessor != null && startingEndPredecessor instanceof OccurrenceSpecification
+				&& predecessorExecution != null
+				&& startingEndPredecessor.equals(predecessorExecution.getStart())) {
+			fragments.add(fragments.indexOf(predecessorExecution) + 1, senderEventMessage);
+		}
+		// Else set it directly after the predecessor
+		else {
+			fragments.add(fragments.indexOf(startingEndPredecessor) + 1, senderEventMessage);
+		}
+
+		fragments.add(receiverEventMessage);
+		fragments.move(fragments.indexOf(senderEventMessage) + 1, receiverEventMessage);
+	}
 
 	private BehaviorExecutionSpecification createExecution(/* Operation operation, */
 	final Lifeline covered, final Message message) {
@@ -1729,6 +1764,40 @@ public class SequenceServices {
 
 		message.setName(messageName);
 		message.setMessageSort(MessageSort.ASYNCH_CALL_LITERAL);
+
+		// Create message send event
+		final MessageOccurrenceSpecification senderEventMessage = factory
+				.createMessageOccurrenceSpecification();
+		senderEventMessage.setName(message.getName() + SENDER_MESSAGE_SUFFIX);
+		senderEventMessage.getCovereds().add(source);
+		senderEventMessage.setMessage(message);
+
+		// Create message receive event
+		final MessageOccurrenceSpecification receiverEventMessage = factory
+				.createMessageOccurrenceSpecification();
+		receiverEventMessage.setName(message.getName() + RECEIVER_MESSAGE_SUFFIX);
+		receiverEventMessage.getCovereds().add(target);
+		receiverEventMessage.setMessage(message);
+
+		message.setSendEvent(senderEventMessage);
+		message.setReceiveEvent(receiverEventMessage);
+
+		return message;
+	}
+	
+	private Message createCreationsMessage(Interaction interaction, 
+			NamedElement sourceFragment, NamedElement targetFragment) {
+		final UMLFactory factory = UMLFactory.eINSTANCE;
+		final Message message = factory.createMessage();
+
+		final Lifeline source = getLifeline(sourceFragment);
+		final Lifeline target = getLifeline(targetFragment);
+
+		String messageName = "";
+		messageName = "Message_" + Integer.toString(interaction.getMessages().size());
+
+		message.setName(messageName);
+		message.setMessageSort(MessageSort.CREATE_MESSAGE_LITERAL);
 
 		// Create message send event
 		final MessageOccurrenceSpecification senderEventMessage = factory
