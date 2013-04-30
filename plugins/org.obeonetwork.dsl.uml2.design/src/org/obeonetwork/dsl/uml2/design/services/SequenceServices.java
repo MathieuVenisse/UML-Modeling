@@ -49,6 +49,7 @@ import org.eclipse.uml2.uml.Lifeline;
 import org.eclipse.uml2.uml.Message;
 import org.eclipse.uml2.uml.MessageOccurrenceSpecification;
 import org.eclipse.uml2.uml.MessageSort;
+import org.eclipse.uml2.uml.Model;
 import org.eclipse.uml2.uml.NamedElement;
 import org.eclipse.uml2.uml.OccurrenceSpecification;
 import org.eclipse.uml2.uml.OpaqueBehavior;
@@ -2158,6 +2159,12 @@ public class SequenceServices {
 		}
 
 		return result;
+	}
+	
+	public void initInteraction(Package _package) {
+		Interaction interaction = UMLFactory.eINSTANCE.createInteraction();
+		interaction.setName(_package.getName() + "_Interaction");
+		_package.getPackagedElements().add(interaction);
 	}
 
 }
