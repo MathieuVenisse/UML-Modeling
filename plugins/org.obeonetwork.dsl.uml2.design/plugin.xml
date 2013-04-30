@@ -60,10 +60,6 @@ Contributors:
             id="fr.obeo.dsl.viewpoint.ui.navigator.actions.uml.delete"
             name="Delete UML Element">
       </command>
-        <command
-            id="fr.obeo.dsl.viewpoint.ui.navigator.actions.uml.scenario.create"
-            name="Create Scenario">
-      </command>
    </extension>
   
    <extension
@@ -81,52 +77,9 @@ Contributors:
        		</with>
            </enabledWhen>
         </handler>
-         <handler
-              class="org.obeonetwork.dsl.uml2.design.ui.extension.commands.CreateScenario"
-              commandId="fr.obeo.dsl.viewpoint.ui.navigator.actions.uml.scenario.create">
-           <enabledWhen>
-            <with variable="selection">
-                 <iterate
-                       ifEmpty="false"
-                       operator="and">
-                  <instanceof
-                        value="org.eclipse.uml2.uml.Package">
-                  </instanceof>
-		          <test
-                     forcePluginActivation="true"
-                     property="org.obeonetwork.dsl.uml2.design.Behavioral">
-                  </test>
-               </iterate>		           
-       		</with>
-           </enabledWhen>
-        </handler>
    </extension>
   
   
-    <extension
-         point="org.eclipse.ui.menus">
-      <menuContribution
-            locationURI="popup:org.eclipse.ui.popup.any?after=additions">
-         <command
-               icon="icons/deleteModel.gif"               
-               label="Delete"
-               commandId="fr.obeo.dsl.viewpoint.ui.navigator.actions.uml.delete"
-               style="push">
-            <visibleWhen
-                  checkEnabled="true">
-            </visibleWhen>
-         </command>
-          <command
-               icon="icons/NewUmlModel.gif"               
-               label="Create Scenario"
-               commandId="fr.obeo.dsl.viewpoint.ui.navigator.actions.uml.scenario.create"
-               style="push">
-            <visibleWhen
-                  checkEnabled="true">
-            </visibleWhen>
-         </command>
-      </menuContribution>
-   </extension>
     <extension
           point="org.eclipse.core.expressions.propertyTesters">
        <propertyTester
