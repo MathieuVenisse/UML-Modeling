@@ -110,7 +110,7 @@ public class SequenceServices {
 	 * Operation service.
 	 */
 	private OperationServices operationService = new OperationServices();
-	
+
 	/**
 	 * Retrieves the context element ({@link Lifeline} or {@link ExecutionSpecification}) of the given
 	 * {@link OccurrenceSpecification}.
@@ -121,52 +121,56 @@ public class SequenceServices {
 	 *         attached or otherwise, the {@link Lifeline}otherwise it is attached to.
 	 */
 	public NamedElement findOccurrenceSpecificationContext(OccurrenceSpecification occurrenceSpecification) {
-		final Lifeline lifeline = occurrenceSpecification.getCovereds().get(0);
-		final Stack<NamedElement> context = new Stack<NamedElement>();
-		context.add(lifeline);
+		if (null != occurrenceSpecification) {
 
-		Interaction enclosingInteraction = getEnclosingInteraction(occurrenceSpecification);
-		List<InteractionFragment> allFragments = enclosingInteraction.getFragments();
+			final Lifeline lifeline = occurrenceSpecification.getCovereds().get(0);
+			final Stack<NamedElement> context = new Stack<NamedElement>();
+			context.add(lifeline);
 
-		final List<InteractionFragment> fragments = new ArrayList<InteractionFragment>();
-		for (InteractionFragment fragment : allFragments) {
-			if (fragment.getCovered(lifeline.getName()) != null)
-				fragments.add(fragment);
-		}
+			Interaction enclosingInteraction = getEnclosingInteraction(occurrenceSpecification);
+			List<InteractionFragment> allFragments = enclosingInteraction.getFragments();
 
-		for (int i = 0; i < fragments.size(); i++) {
-			final InteractionFragment e = fragments.get(i);
-			InteractionFragment en;
-			if (i + 1 < fragments.size())
-				en = fragments.get(i + 1);
-			else
-				en = null;
+			final List<InteractionFragment> fragments = new ArrayList<InteractionFragment>();
+			for (InteractionFragment fragment : allFragments) {
+				if (fragment.getCovered(lifeline.getName()) != null)
+					fragments.add(fragment);
+			}
 
-			if (e instanceof MessageOccurrenceSpecification && en != null
-					&& en instanceof ExecutionSpecification)
-				context.add(en);
+			for (int i = 0; i < fragments.size(); i++) {
+				final InteractionFragment e = fragments.get(i);
+				InteractionFragment en;
+				if (i + 1 < fragments.size())
+					en = fragments.get(i + 1);
+				else
+					en = null;
 
-			if (e instanceof ExecutionOccurrenceSpecification) {
-				if (en == null || !(en instanceof ExecutionSpecification))
+				if (e instanceof MessageOccurrenceSpecification && en != null
+						&& en instanceof ExecutionSpecification)
+					context.add(en);
+
+				if (e instanceof ExecutionOccurrenceSpecification) {
+					if (en == null || !(en instanceof ExecutionSpecification))
+						context.pop();
+				}
+
+				// Found our element
+				if (e == occurrenceSpecification) {
+					return context.peek();
+				}
+
+				if (e instanceof ExecutionOccurrenceSpecification) {
+					if (en != null && en instanceof ExecutionSpecification)
+						context.add(fragments.get(i + 1));
+				}
+
+				if (e instanceof MessageOccurrenceSpecification && isEnd(e, fragments)) {
 					context.pop();
+				}
 			}
 
-			// Found our element
-			if (e == occurrenceSpecification) {
-				return context.peek();
-			}
-
-			if (e instanceof ExecutionOccurrenceSpecification) {
-				if (en != null && en instanceof ExecutionSpecification)
-					context.add(fragments.get(i + 1));
-			}
-
-			if (e instanceof MessageOccurrenceSpecification && isEnd(e, fragments)) {
-				context.pop();
-			}
+			return lifeline;
 		}
-
-		return lifeline;
+		return null;
 	}
 
 	/**
@@ -488,7 +492,7 @@ public class SequenceServices {
 		lifeline.getNearestPackage().getPackagedElements().add(dependency);
 		lifeline.getClientDependencies().add(dependency);
 	}
-	
+
 	/**
 	 * Create a typed execution. Execution could be created on lifeline or other parent execution.
 	 * 
@@ -503,7 +507,7 @@ public class SequenceServices {
 	 */
 	public void createExecution(Interaction interaction, NamedElement fragment, Operation operation,
 			NamedElement startingEndPredecessor) {
-		final Lifeline lifeline = getLifeline(fragment);		
+		final Lifeline lifeline = getLifeline(fragment);
 
 		final UMLFactory factory = UMLFactory.eINSTANCE;
 		StringBuffer executionName;
@@ -580,9 +584,19 @@ public class SequenceServices {
 	 */
 	public void createExecution(Interaction interaction, NamedElement fragment,
 			NamedElement startingEndPredecessor) {
-		createExecution(interaction, fragment, null, startingEndPredecessor);
+		org.eclipse.uml2.uml.Type type;
+		if (fragment instanceof Lifeline) {
+			type = getType((Lifeline)fragment);
+			interaction = ((Lifeline)fragment).getInteraction();
+		} else {
+			type = getType(((ExecutionSpecification)fragment).getCovereds().get(0));
+			interaction = ((ExecutionSpecification)fragment).getEnclosingInteraction();
+		}
+		
+		final Operation operation = operationService.createOperation(type);
+		createExecution(interaction, fragment, operation, startingEndPredecessor);
 	}
-	
+
 	/**
 	 * Create synchronous typed message.
 	 * 
@@ -703,7 +717,7 @@ public class SequenceServices {
 
 		return result;
 	}
-	
+
 	/**
 	 * Get all actors and their containers
 	 * 
@@ -1381,6 +1395,24 @@ public class SequenceServices {
 		createAsynchronousMessage(interaction, source, target, true, startingEndPredecessor,
 				finishingEndPredecessor, operation);
 	}
+	
+	public void createOperationAndLostMessage(NamedElement source,
+			NamedElement startingEndPredecessor) {
+		// Get associated class and interaction
+		org.eclipse.uml2.uml.Type type;
+		Interaction interaction;
+		if (source instanceof Lifeline) {
+			type = getType((Lifeline)source);
+			interaction = ((Lifeline)source).getInteraction();
+		} else {
+			type = getType(((ExecutionSpecification)source).getCovereds().get(0));
+			interaction = ((ExecutionSpecification)source).getEnclosingInteraction();
+		}
+		final Operation operation = operationService.createOperation(type);
+		// Create message
+		createAsynchronousMessage(interaction, source, null, false, startingEndPredecessor,
+				null, operation);
+	}
 
 	/**
 	 * Create an operation and an synchronous message from a lifeline or an execution. Create the operation in
@@ -1663,20 +1695,60 @@ public class SequenceServices {
 			message.getNearestPackage().getPackagedElements().add(signal);
 		}
 
+		if (message.getSendEvent() != null) {
+			MessageOccurrenceSpecification senderEventMessage = (MessageOccurrenceSpecification)message
+					.getSendEvent();
+			// If predecessor is the beginning of an execution add message after the execution
+			if (startingEndPredecessor != null && startingEndPredecessor instanceof OccurrenceSpecification
+					&& predecessorExecution != null
+					&& startingEndPredecessor.equals(predecessorExecution.getStart())) {
+				fragments.add(fragments.indexOf(predecessorExecution) + 1, senderEventMessage);
+			}
+			// Else set it directly after the predecessor
+			else {
+				fragments.add(fragments.indexOf(startingEndPredecessor) + 1, senderEventMessage);
+			}
+		}
+
+		if (message.getReceiveEvent() != null) {
+			MessageOccurrenceSpecification receiverEventMessage = (MessageOccurrenceSpecification)message
+					.getReceiveEvent();
+			ExecutionOccurrenceSpecification endExec = null;
+			if (execution != null && receiverEventMessage != null) {
+				execution.setStart(receiverEventMessage);
+				endExec = factory.createExecutionOccurrenceSpecification();
+				endExec.setName(execution.getName() + EXECUTION_END_SUFFIX);
+				endExec.getCovereds().add(target);
+				endExec.setExecution(execution);
+				execution.setFinish(endExec);
+			}
+
+			fragments.add(receiverEventMessage);
+			fragments.move(fragments.indexOf(startingEndPredecessor) + 1, receiverEventMessage);
+			if (execution != null) {
+				fragments.add(execution);
+				fragments.add(endExec);
+				fragments.move(fragments.indexOf(receiverEventMessage) + 1, execution);
+				fragments.move(fragments.indexOf(execution) + 1, endExec);
+			}
+		}
+	}
+
+	public void createCreationMessage(Interaction interaction, NamedElement sourceFragment,
+			NamedElement targetFragment, NamedElement startingEndPredecessor) {
+
+		final BehaviorExecutionSpecification predecessorExecution = getExecution((InteractionFragment)startingEndPredecessor);
+		final EList<InteractionFragment> fragments = interaction.getFragments();
+
+		// Create message
+		final Message message = createCreationsMessage(interaction, sourceFragment, targetFragment);
+
+		interaction.getMessages().add(message);
+
 		MessageOccurrenceSpecification senderEventMessage = (MessageOccurrenceSpecification)message
 				.getSendEvent();
 		MessageOccurrenceSpecification receiverEventMessage = (MessageOccurrenceSpecification)message
 				.getReceiveEvent();
-
-		ExecutionOccurrenceSpecification endExec = null;
-		if (execution != null) {
-			execution.setStart(receiverEventMessage);
-			endExec = factory.createExecutionOccurrenceSpecification();
-			endExec.setName(execution.getName() + EXECUTION_END_SUFFIX);
-			endExec.getCovereds().add(target);
-			endExec.setExecution(execution);
-			execution.setFinish(endExec);
-		}
 
 		// If predecessor is the beginning of an execution add message after the execution
 		if (startingEndPredecessor != null && startingEndPredecessor instanceof OccurrenceSpecification
@@ -1691,23 +1763,16 @@ public class SequenceServices {
 
 		fragments.add(receiverEventMessage);
 		fragments.move(fragments.indexOf(senderEventMessage) + 1, receiverEventMessage);
-		if (execution != null) {
-			fragments.add(execution);
-			fragments.add(endExec);
-			fragments.move(fragments.indexOf(receiverEventMessage) + 1, execution);
-			fragments.move(fragments.indexOf(execution) + 1, endExec);
-		}
 	}
-	
-	public void createCreationMessage(Interaction interaction, NamedElement sourceFragment,
+
+	public void createDestructionMessage(Interaction interaction, NamedElement sourceFragment,
 			NamedElement targetFragment, NamedElement startingEndPredecessor) {
 
 		final BehaviorExecutionSpecification predecessorExecution = getExecution((InteractionFragment)startingEndPredecessor);
 		final EList<InteractionFragment> fragments = interaction.getFragments();
 
 		// Create message
-		final Message message = createCreationsMessage(interaction, sourceFragment,
-				targetFragment);
+		final Message message = createDestructionMessage(interaction, sourceFragment, targetFragment);
 
 		interaction.getMessages().add(message);
 
@@ -1752,8 +1817,28 @@ public class SequenceServices {
 		final UMLFactory factory = UMLFactory.eINSTANCE;
 		final Message message = factory.createMessage();
 
-		final Lifeline source = getLifeline(sourceFragment);
-		final Lifeline target = getLifeline(targetFragment);
+		if (null != sourceFragment) {
+			final Lifeline source = getLifeline(sourceFragment);
+			// Create message send event
+			final MessageOccurrenceSpecification senderEventMessage = factory
+					.createMessageOccurrenceSpecification();
+			senderEventMessage.setName(message.getName() + SENDER_MESSAGE_SUFFIX);
+			senderEventMessage.getCovereds().add(source);
+			senderEventMessage.setMessage(message);
+			message.setSendEvent(senderEventMessage);
+		}
+
+		if (null != targetFragment) {
+			final Lifeline target = getLifeline(targetFragment);
+			// Create message receive event
+			final MessageOccurrenceSpecification receiverEventMessage = factory
+					.createMessageOccurrenceSpecification();
+			receiverEventMessage.setName(message.getName() + RECEIVER_MESSAGE_SUFFIX);
+			receiverEventMessage.getCovereds().add(target);
+			receiverEventMessage.setMessage(message);
+
+			message.setReceiveEvent(receiverEventMessage);
+		}
 
 		String messageName = "";
 		if (operation == null) {
@@ -1764,6 +1849,23 @@ public class SequenceServices {
 
 		message.setName(messageName);
 		message.setMessageSort(MessageSort.ASYNCH_CALL_LITERAL);
+
+		return message;
+	}
+
+	private Message createCreationsMessage(Interaction interaction, NamedElement sourceFragment,
+			NamedElement targetFragment) {
+		final UMLFactory factory = UMLFactory.eINSTANCE;
+		final Message message = factory.createMessage();
+
+		final Lifeline source = getLifeline(sourceFragment);
+		final Lifeline target = getLifeline(targetFragment);
+
+		String messageName = "";
+		messageName = "Message_" + Integer.toString(interaction.getMessages().size());
+
+		message.setName(messageName);
+		message.setMessageSort(MessageSort.CREATE_MESSAGE_LITERAL);
 
 		// Create message send event
 		final MessageOccurrenceSpecification senderEventMessage = factory
@@ -1784,9 +1886,9 @@ public class SequenceServices {
 
 		return message;
 	}
-	
-	private Message createCreationsMessage(Interaction interaction, 
-			NamedElement sourceFragment, NamedElement targetFragment) {
+
+	private Message createDestructionMessage(Interaction interaction, NamedElement sourceFragment,
+			NamedElement targetFragment) {
 		final UMLFactory factory = UMLFactory.eINSTANCE;
 		final Message message = factory.createMessage();
 
@@ -1797,7 +1899,7 @@ public class SequenceServices {
 		messageName = "Message_" + Integer.toString(interaction.getMessages().size());
 
 		message.setName(messageName);
-		message.setMessageSort(MessageSort.CREATE_MESSAGE_LITERAL);
+		message.setMessageSort(MessageSort.DELETE_MESSAGE_LITERAL);
 
 		// Create message send event
 		final MessageOccurrenceSpecification senderEventMessage = factory
